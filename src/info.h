@@ -9,7 +9,6 @@ enum ERRORTYPE
 }
 
 typedef unsigned short int precentage_t;
-
 typedef struct MemoryInformation
 {
   // The used memory
@@ -42,10 +41,10 @@ typedef struct CPUInformation
 
 typedef struct UptimeInformation
 {
-  // The total CPU time, including active and inactive time
+  // The total CPU time 
   unsigned long uptime;
 
-  // The idle time; The time the CPU is idle
+  //The time the CPU is idle
   unsigned long idletime;
 } UptimeInformation;
 
