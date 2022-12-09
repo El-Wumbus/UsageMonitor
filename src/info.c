@@ -74,11 +74,18 @@ ERRORCODE getCPUUsage(CPUInformation *cpu_info)
     {
       // Read the two values in the file. The first one is the system uptime in seconds,
       // the second is the cpu idle time in seconds.
-      if (!fscanf(system_uptime, "%lu %lu", &uptime[i], &idletime[i]))
+      
+      // get uptime
+      UptimeInformation uptime_struct;
+      error = getUptime(&uptime_struct);
+      if (error)
       {
-        fclose(system_uptime);
-        return 2;
+        return error;
       }
+
+      uptime[i] = uptime_struct.uptime;
+      ideltime[i] = uptime_struct.idletime;
+      
       sleep(1); // Wait a second.
     }
 
@@ -88,19 +95,62 @@ ERRORCODE getCPUUsage(CPUInformation *cpu_info)
 
   // Close the file as we are finally done with it.
   fclose(system_uptime);
-  
+
   // Divide everything to finish taking the average
-  unsigned short final_usage =  usage/AVERAGE_SIZE;
+  unsigned short final_usage = usage/AVERAGE_SIZE;
 
   // Copy data
  cpu_info->usage = final_usage;
  return 0;
 }
 
-ERRORCODE getCPUInformation(CPUInformation &cpu_info_struct)
+ERRORCODE getCPUFrequency(CPUInformation *cpu_info_struct)
 {
-  unsigned cores, threads;
+   // The the ammount of data points to average
+  const AVERAGE_LEN = 2;
+  float frequency_mhz[AVERAGE_LEN], average_frequency = 0;
   
+  // Open the cpu info file in read-only
+  FILE *cpu_info = fopen("/proc/cpuinfo", "r");
+
+  if (cpu_info == NULL)
+  {
+    return 1;
+  }
+
+  // Collect the data
+  for (int i=0; i < AVERAGE_LEN; i++)
+  {
+    // average the frequency of all cpus
+    float frequency[BUFFERSIZE];
+    int frequency_len = 0;  
+
+    // keep collecting the frequencies for all cpus
+    for(;fscanf(cpu_info, "cpu MHz\t: %f", &frequency[frequency_len]); frequency_len++;)
+    {
+      combined_frequency += frequency[frequency_len];
+    };
+
+
+    frequency_mhz[i] += combined_frequency / frequency_len;
+    sleep(0.5);
+  }
+  
+  // Average the data
+  for (int i=0; i < AVERAGE_LEN; i++)
+  {
+    average_frequency += frequency_mhz[i];
+  }
+
+  average_frequency /= AVERAGE_LEN; 
+
+}
+
+ERRORCODE getCPUInformation(CPUInformation *cpu_info_struct)
+{
+  unsigned int cores, threads;
+  char model[BUFFERSIZE];
+
   // For getting CPU information, we'll use procfs
 
   // Open /proc/cpuinfo in read-only mode
@@ -117,6 +167,44 @@ ERRORCODE getCPUInformation(CPUInformation &cpu_info_struct)
     return 2;
   }
 
+  // Get the cpu model name
+  if (!fscanf(cpu_info, "model name\t: %s"), &model)
+  {
+    return 2;
+  }
+  
+  // We're done
+  fclose(cpu_info);
 
+  cpu_info_struct->cores = cores;
+  cpu_info_struct->threads = threads;
+
+  // Copy the string
+  strcpy(cpu_info_struct->model, model);
+  return 0;
 }
 
+ERRORCODE getUptime(UptimeInformation* uptime_struct)
+{
+  // uptime == system uptime, idletime == cpu time spent doing nothing
+  unsigned long uptime, idletime;
+  FILE *system_uptime = fopen("/proc/uptime", "r");
+
+  if (system_uptime == NULL)
+  {
+    return 1;
+  }
+
+  // Read two non-negative large numbers, the first is the uptime,
+  // the second is the idletime. All measured in seconds.
+  if(!fscanf("%lu %lu", &uptime, &idletime))
+  {
+    fclose(system_uptime);
+    return 2;
+  }
+
+  // Copy data
+  uptime_struct->uptime = uptime;
+  uptime_struct->idletime = idletime;
+  return 0;
+}
